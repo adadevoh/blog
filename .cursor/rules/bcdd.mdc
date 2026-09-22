@@ -1,0 +1,21 @@
+---
+description: Follow BCDD from the shared method repo, then this project's contracts
+alwaysApply: true
+---
+
+# BCDD
+
+1. Fetch and follow the method. Do not copy it into this repo.
+
+   https://raw.githubusercontent.com/adadevoh/bcdd/main/bcdd.md
+
+   Readable: https://github.com/adadevoh/bcdd/blob/main/bcdd.md
+
+2. Then read this project's contracts. Skip `node_modules`, `bin`, `obj`.
+
+   - `*design.md` — product
+   - `bc/**/*.bc.md` — observable behaviour
+   - `bc/**/*.spec.md` — mechanism
+   - other root `*.md` (for example `README.md`)
+
+Ladder: design wins on product, BC on behaviour, spec on how. Do not invent routes, clocks, or features. Do not change the remote `bcdd.md` to fit this project — product rules go in `blog.design.md`.

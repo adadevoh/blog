@@ -1,39 +1,40 @@
 # Auth Behaviour Contract
 
-Implements **BH-AUTH** — `blog.design.md` "Poster signs in with OTP to their phone or email and reaches their control panel. Today only the owner’s contact may succeed; other contacts do not create an account".
+Implements **BH-AUTH** — `blog.design.md` "Publisher signs up and signs in with username + password or passkey and reaches their control panel".
 
-Iteration 3. Observable behaviour only. No class names. If design, tests, or code disagree with this file, this BC wins (unless the product changed — then update the design doc and this file first).
+Iteration 1. Observable behaviour only. No class names. If design, tests, or code disagree with this file, this BC wins (unless the product changed — then update the design doc and this file first).
 
-Scope: request OTP, open a session, what that session authorises today.
-Out of scope: public signup, creating a second poster or diary, passwords, OAuth, B2C, logout, refresh tokens.
+Scope: publisher signup and session.
+Out of scope: subscriber OTP (BH-UNLOCK), OAuth, B2C, logout, subscriber grants.
 
-## Surface — `{site}/auth`
+## Surface — `{site}/auth/publishers`
 
 Tests call these HTTP routes on the website host. JSON, camelCase.
 
-A session is `Authorization: Bearer {token}`. It is a **poster** session. Today the only poster is the configured owner. The token authorises **that poster’s** control panel (BH-POST, BH-MANAGE, BH-NOTIFY write path). It does not put a poster id in the path.
+A publisher session is `Authorization: Bearer {publisherToken}`. It authorises **this** publisher’s control panel only. It is not a subscriber session.
 
-### POST /auth/otp
+### POST /auth/publishers
 
-- Body: `{ email?, phone? }` — exactly one of `email` or `phone`
-- **[AUTH-01]** Success (contact is the owner’s): **204**. An OTP is sent to that contact. The OTP is not in the response
-- **[AUTH-02]** Fail (contact is not the owner): **401** `{ error: "invalid_credentials" }`. No OTP. No account is created
-- **[AUTH-03]** Fail (both or neither, or invalid contact): **400** `{ error: "validation_error" }`
-- **[AUTH-04]** Fail (store unreachable): **503** `{ error: "storage_unavailable" }` — never **204** or **401**
+- Body: `{ username, password }`
+- **[AUTH-01]** Success: **201** `{ username }`. A publisher and empty catalog exist. No session yet
+- **[AUTH-02]** Fail (username taken): **409** `{ error: "username_taken" }`
+- **[AUTH-03]** Fail (missing/invalid username or password): **400** `{ error: "validation_error" }`
+- **[AUTH-04]** Fail (store unreachable): **503** `{ error: "storage_unavailable" }` — never **201**
 
-### POST /auth/session
+### POST /auth/publishers/session
 
-- Body: `{ email?, phone?, otp }` — the same single contact plus the OTP
-- **[AUTH-05]** Success (owner contact, correct OTP): **200** `{ token }`. A session is created
-- **[AUTH-06]** Fail (unknown contact, not the owner, or wrong OTP): **401** `{ error: "invalid_credentials" }`; no token; no account is created
-- **[AUTH-07]** Fail (missing otp or invalid body): **400** `{ error: "validation_error" }`
-- **[AUTH-08]** Fail (store unreachable): **503** `{ error: "storage_unavailable" }` — never **200** or **401**
+- Body: `{ username, password }` **or** a passkey assertion that identifies that username
+- **[AUTH-05]** Success (password): **200** `{ token }` — a publisher session
+- **[AUTH-06]** Success (passkey): **200** `{ token }` — same session shape as AUTH-05
+- **[AUTH-07]** Fail (unknown username, wrong password, or failed passkey): **401** `{ error: "invalid_credentials" }`; no token
+- **[AUTH-08]** Fail (invalid body): **400** `{ error: "validation_error" }`
+- **[AUTH-09]** Fail (store unreachable): **503** `{ error: "storage_unavailable" }` — never **200** or **401**
 
-Until this BC is done, a request that would succeed returns **501** `{ error: "not_implemented" }` after validation. **AUTH-02** and **AUTH-06** still run for real (no signup).
+Until this BC is done, a request that would succeed returns **501** `{ error: "not_implemented" }` after validation.
 
 ## Rules
 
-- **[AUTH-R1]** A contact that is not the owner never becomes a poster
-- **[AUTH-R2]** The session authorises only this poster’s diary. A later second poster’s token must not manage this diary
-- **[AUTH-R3]** Never log the OTP or the session token
-- **[AUTH-R4]** Control-panel operations without a valid token are **404** `not_found`, not **403**
+- **[AUTH-R1]** A publisher session never authorises subscriber read of another catalog by itself
+- **[AUTH-R2]** Never log passwords, passkey material, or the session token
+- **[AUTH-R3]** Control-panel operations without a valid publisher token are **404** `not_found`, not **403**
+- **[AUTH-R4]** Signup does not create a subscriber or a grant on this catalog

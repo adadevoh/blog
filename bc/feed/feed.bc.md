@@ -1,32 +1,35 @@
 # Feed Behaviour Contract
 
-Implements **BH-FEED** — `blog.design.md` "Shareable diary: public posts as a card feed, 5 then more on scroll, newest first".
+Implements **BH-FEED** — `blog.design.md` "Per-publisher catalog: blurred without a covering subscriber grant; otherwise public works in the grant, 5 then more, newest first. Private never listed".
 
-Iteration 1. Observable behaviour only. No class names. If design, tests, or code disagree with this file, this BC wins (unless the product changed — then update the design doc and this file first).
+Iteration 2. Observable behaviour only. No class names. If design, tests, or code disagree with this file, this BC wins (unless the product changed — then update the design doc and this file first).
 
-Scope: read the diary in view as a public card feed.
-Out of scope: opening a full entry (BH-READ), subscribe, control panel, other diaries, public signup.
+Scope: list a publisher’s catalog page.
+Out of scope: full body (BH-READ), unlock (BH-UNLOCK), grants (BH-SUBSCRIBE), compose.
 
-## Surface — `{site}/diary/posts`
+## Surface — `{site}/publishers/{username}/works`
 
-Tests call these HTTP routes on the website host. JSON, camelCase. No session.
+Tests call these HTTP routes on the website host. JSON, camelCase.
 
-The diary in view is the owner’s diary. A later amendment may add a diary name on this path; do not invent one now.
+Page size is **5**. `offset` skips that many works that would appear in this response (newest first).
 
-Page size is **5**. `offset` is a non-negative count of public posts to skip (newest first).
+Optional header: `Authorization: Bearer {subscriberToken}` from BH-UNLOCK.
 
-### GET /diary/posts
+### GET /publishers/{username}/works
 
 - Query: `offset` (optional, default `0`)
-- **[FEED-01]** Success: **200** `{ posts: [ { id, content, topic, postedAt } ] }`. At most **5** posts. Only **public** posts for this diary. Newest `postedAt` first. `offset` skips that many public posts.
-- **[FEED-02]** Success (none left): **200** `{ posts: [] }` when the diary has no further public posts
-- **[FEED-03]** Fail (invalid `offset`): **400** `{ error: "validation_error" }`
-- **[FEED-04]** Fail (store unreachable): **503** `{ error: "storage_unavailable" }` — never **200** with `[]` when the store is down
+- **[FEED-01]** Success, no subscriber session or no grant on this publisher: **200** `{ blurred: true, works: [ { id, title, topic, preview } ] }`. At most **5**. Public works only. No full `content`. Newest first
+- **[FEED-02]** Success, subscriber session with **whole-catalog** grant: **200** `{ blurred: false, works: [ { id, title, content, topic, postedAt } ] }`. At most **5** public works of **this** publisher
+- **[FEED-03]** Success, subscriber session with **topic** grant(s): same shape as FEED-02 but only public works whose topic is in the grant
+- **[FEED-04]** Success (none left): **200** with `works: []` when there are no further works that this caller is allowed to list
+- **[FEED-05]** Fail (unknown `{username}`): **404** `{ error: "not_found" }`
+- **[FEED-06]** Fail (invalid `offset`): **400** `{ error: "validation_error" }`
+- **[FEED-07]** Fail (store unreachable): **503** `{ error: "storage_unavailable" }` — never **200** with `[]` when the store is down
 
 Until this BC is done, a request that would succeed returns **501** `{ error: "not_implemented" }` after validation.
 
 ## Rules
 
-- **[FEED-R1]** Private posts never appear in `posts`
-- **[FEED-R2]** The list is this diary only. Do not mix in another poster’s posts
-- **[FEED-R3]** Do not require a session to read the feed
+- **[FEED-R1]** Private works never appear, even with a whole-catalog grant
+- **[FEED-R2]** Do not mix another publisher’s works into this list
+- **[FEED-R3]** A publisher session is not a covering grant for this catalog

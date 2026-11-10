@@ -1,34 +1,27 @@
 # Subscribe Behaviour Contract
 
-Implements **BH-SUBSCRIBE** — `blog.design.md` "On a diary: subscribe with email or phone to all public posts, or filter by one tag used on that diary’s public posts".
+Implements **BH-SUBSCRIBE** — `blog.design.md` "The grant after invite or accept: whole catalog or 1..N topics. Uniqueness per publisher, subscriber, catalog-or-topic".
 
-Iteration 2. Observable behaviour only. No class names. If design, tests, or code disagree with this file, this BC wins (unless the product changed — then update the design doc and this file first).
+Iteration 3. Observable behaviour only. No class names. If design, tests, or code disagree with this file, this BC wins (unless the product changed — then update the design doc and this file first).
 
-Scope: create a subscription to the diary in view.
-Out of scope: sending the notification (BH-NOTIFY), unsubscribe, accounts, other diaries.
+Scope: the grant record that unlock uses. Created only by BH-INVITE or accepted BH-REQUEST.
+Out of scope: open self-serve POST-to-subscribe, sending notifications (BH-NOTIFY), listing/deleting grants (BH-SUBS).
 
-## Surface — `{site}/diary/subscriptions`
+## Surface
 
-Tests call these HTTP routes on the website host. JSON, camelCase. No session.
+No public “subscribe me now” route. Grants appear as a result of invite (BH-INVITE) or accept (BH-REQUEST). Tests observe a grant as `{ publisher, subscriber, catalog: true }` or `{ publisher, subscriber, topics: [ ... ] }`.
 
-The diary in view is the owner’s diary. The subscription is to **that diary**, so a later second diary does not inherit these subscribers.
+- **[SUBSCRIBE-01]** After a successful invite or accept for **whole catalog**: a grant exists with `catalog: true` and no topic restriction
+- **[SUBSCRIBE-02]** After a successful invite or accept for **topics**: a grant exists with those topic names (1..N) for this publisher
+- **[SUBSCRIBE-03]** Fail (would grant this publisher a subscriber grant on **their** catalog): **409** `{ error: "self_subscribe" }` — no grant
+- **[SUBSCRIBE-04]** Fail (same publisher, same subscriber, same catalog-or-topic set already): **409** `{ error: "already_subscribed" }`
+- **[SUBSCRIBE-05]** Fail (store unreachable while creating the grant): **503** `{ error: "storage_unavailable" }` — never a successful invite/accept
 
-Exactly one of `email` or `phone`. `topic` omitted means all public posts on this diary.
-
-### POST /diary/subscriptions
-
-- Body: `{ email?, phone?, topic? }`
-- **[SUBSCRIBE-01]** Success (all posts): **201** `{ id, channel, to, topic: null }` when `topic` is omitted. `channel` is `"email"` or `"phone"`; `to` is the contact given
-- **[SUBSCRIBE-02]** Success (filtered): **201** `{ id, channel, to, topic }` when `topic` matches a tag already used on a **public** post on this diary
-- **[SUBSCRIBE-03]** Fail (both email and phone, or neither, or invalid contact): **400** `{ error: "validation_error" }`
-- **[SUBSCRIBE-04]** Fail (`topic` present but not used on any public post on this diary): **400** `{ error: "unknown_topic" }`
-- **[SUBSCRIBE-05]** Fail (same contact, same diary, same topic already subscribed — `topic` null counts as all): **409** `{ error: "already_subscribed" }`
-- **[SUBSCRIBE-06]** Fail (store unreachable): **503** `{ error: "storage_unavailable" }` — never **201**
-
-Until this BC is done, a request that would succeed returns **501** `{ error: "not_implemented" }` after validation.
+Until invite/request and this BC are done, those operations may return **501** `{ error: "not_implemented" }`.
 
 ## Rules
 
-- **[SUBSCRIBE-R1]** A subscription is not a session and does not open the control panel
-- **[SUBSCRIBE-R2]** Whole-diary (`topic` null) and a tagged subscription for the same contact are two subscriptions
-- **[SUBSCRIBE-R3]** Uniqueness of (diary, contact, topic) is in the store, not only in application checks
+- **[SUBSCRIBE-R1]** A grant is not a publisher session and does not open the control panel
+- **[SUBSCRIBE-R2]** Whole-catalog and topic grants for the same subscriber on the same publisher are distinct; topic grants do not imply other topics
+- **[SUBSCRIBE-R3]** Uniqueness of (publisher, subscriber, catalog-or-topic) is in the store
+- **[SUBSCRIBE-R4]** No grant without invite or accept
